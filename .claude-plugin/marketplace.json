@@ -1,0 +1,14 @@
+{
+  "name": "rawcode-studio-marketplace-public",
+  "owner": {
+    "name": "RawCode Studio",
+    "email": "sebastian.soczka@gmail.com",
+    "url": "https://rawcodestudio.net"
+  },
+  "metadata": {
+    "description": "Publiczny marketplace skilli i pluginów Claude Code od RawCode Studio",
+    "version": "1.0.0",
+    "pluginRoot": "./plugins"
+  },
+  "plugins": []
+}
