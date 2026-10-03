@@ -10,5 +10,29 @@
     "version": "1.0.0",
     "pluginRoot": "./plugins"
   },
-  "plugins": []
+  "plugins": [
+    {
+      "name": "create-workflow-skills",
+      "source": "./plugins/create-workflow-skills",
+      "description": "Generator skilli workflow /next-task i /add-task dopasowanych do środowiska projektu. Przeprowadza wywiad o tracker zadań, statusy, definicję ukończenia i politykę git, po czym zapisuje dwa samowystarczalne skille do .claude/skills/. Plugin jednorazowy — po weryfikacji wyłączasz go, skille zostają",
+      "version": "1.2.1",
+      "author": {
+        "name": "RawCode Studio",
+        "email": "sebastian.soczka@gmail.com",
+        "url": "https://rawcodestudio.net"
+      },
+      "category": "productivity",
+      "keywords": [
+        "workflow",
+        "task",
+        "next-task",
+        "add-task",
+        "clickup",
+        "github-issues",
+        "generator",
+        "scaffold"
+      ],
+      "license": "MIT"
+    }
+  ]
 }
