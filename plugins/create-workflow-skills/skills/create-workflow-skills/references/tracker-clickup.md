@@ -144,3 +144,44 @@ jak w jednym z projektów referencyjnych tego wzorca). **Sprawdź jednym
 wywołaniem** (np. odczyt listy albo jednego zadania), zanim oprzesz na tym
 kanale cały wygenerowany skill — inaczej skill trafia w martwy punkt na
 pierwszym realnym użyciu.
+
+## Odczyt przeglądowy
+
+Dla skilla przeglądu zadań (`/create-planned-tasks`): pełny obraz otwartych
+zadań z zakresu, razem z podzadaniami, terminami i rodzicem. Wszystko niżej to
+**odczyt**; zweryfikowane wywołaniem na prawdziwym folderze (2026-11-13).
+
+`cup` tu nie wystarcza: `cup tasks` nie ma zakresu folderu (tylko `--list` albo
+`--space`), a jego `--json` daje wyłącznie pola `id`, `name`, `status`,
+`priority`, `due_date`, `list`, `task_type`, `url` — **bez `parent`,
+`start_date`, `date_created`, `assignees`, `tags`**, więc podzadania nie
+dadzą się podpiąć pod rodzica. Przegląd z podzadaniami idzie przez API v2:
+
+```bash
+# listy folderu (nowe listy dochodzą same)
+GET https://api.clickup.com/api/v2/folder/<folderId>/list?archived=false
+# zadania listy, z podzadaniami, strona po stronie
+GET https://api.clickup.com/api/v2/list/<listId>/task?subtasks=true&include_closed=false&page=<N>
+```
+
+- **Uwierzytelnienie:** nagłówek `Authorization: <token>` (bez `Bearer`).
+  Token `cup` leży w `~/.config/cup/config.json` →
+  `profiles[defaultProfile].apiToken` — skrypt czyta go stamtąd albo ze
+  zmiennej środowiskowej; nigdy nie wpisuje go w kod.
+- **Stronicowanie:** odpowiedź ma `last_page`; czytaj kolejne `page`, aż
+  `last_page` jest `true` albo strona jest pusta.
+- **`include_closed=false` nie odsiewa statusów typu `done`.** Na folderze
+  testowym odpowiedź zawierała zadania `canceled` (typ `done`). Odsiewaj po
+  `status.type` — `closed` **i** `done`.
+- **Pola zadania:** `parent` (id rodzica, gdy to podzadanie), `priority`
+  (`null` albo obiekt z `priority`: `urgent`/`high`/`normal`/`low`),
+  `due_date`/`start_date` (ms jako napis) z flagami `due_date_time`/
+  `start_date_time` (czy z godziną), `date_created`, `status.status` i
+  `status.type`, `list.name`, `url`, `assignees`, `tags`.
+- **`task_count` listy nie jest liczbą otwartych zadań** — na liście z 43
+  otwartymi zadaniami i podzadaniami `task_count` wynosił 29. Do kontroli
+  krzyżowej licz zadania z odpowiedzi, nie to pole.
+- **Kontrola krzyżowa:** `cup tasks --list <listId> --all --json` zwraca te
+  same zadania razem z podzadaniami (także typu `done` — odsiej je po nazwach
+  statusów z `cup spaces --json`), więc zbiór `id` z przeglądu musi się z
+  nim zgadzać lista po liście — nie tylko liczba.

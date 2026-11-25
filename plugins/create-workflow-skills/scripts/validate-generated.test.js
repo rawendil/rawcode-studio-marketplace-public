@@ -300,3 +300,174 @@ test('main zwraca 0 dla poprawnego pliku i 1 dla wadliwego', () => {
 test('main bez argumentów zwraca 2', () => {
   assert.strictEqual(v.main([]), 2);
 });
+
+// --- planned-tasks -------------------------------------------------------
+
+function plannedFixture(skillBody, extraFiles = {}) {
+  const file = fixture('planned-tasks', skillBody);
+  for (const [name, body] of Object.entries(extraFiles)) {
+    fs.writeFileSync(path.join(path.dirname(file), name), body);
+  }
+  return file;
+}
+
+function plannedSkill(fetchBlock) {
+  return `---
+name: planned-tasks
+description: Use when the user invokes /planned-tasks or asks what tasks are planned.
+---
+
+# Zaplanowane zadania
+
+## Przegląd
+
+Tylko odczyt.
+
+## Kontekst trackera
+
+- repo: acme/app
+
+## Workflow
+
+1. Pobierz zestawienie:
+
+\`\`\`bash
+${fetchBlock}
+\`\`\`
+
+## Częste błędy
+
+| Błąd | Zamiast tego |
+|------|--------------|
+| Lista z pamięci | Uruchom skrypt |
+`;
+}
+
+const SCRIPT_CALL = 'node .claude/skills/planned-tasks/tasks.js';
+
+test('planned-tasks: poprawny skill ze skryptem przechodzi', () => {
+  const r = v.validateSkill(plannedFixture(plannedSkill(SCRIPT_CALL), { 'tasks.js': 'console.log(1)\n' }));
+  assert.deepStrictEqual(r.errors, []);
+});
+
+test('planned-tasks: brak wymaganej sekcji', () => {
+  const body = plannedSkill(SCRIPT_CALL).replace('## Częste błędy', '## Uwagi');
+  const r = v.validateSkill(plannedFixture(body, { 'tasks.js': 'console.log(1)\n' }));
+  assert.ok(r.errors.some((e) => e.includes('mistakes')), r.errors.join('\n'));
+});
+
+test('planned-tasks: forma bez skryptu przechodzi', () => {
+  const r = v.validateSkill(plannedFixture(plannedSkill('gh issue list --state open')));
+  assert.deepStrictEqual(r.errors, []);
+});
+
+test('planned-tasks: skrypt wskazany, a nieobecny', () => {
+  const r = v.validateSkill(plannedFixture(plannedSkill(SCRIPT_CALL)));
+  assert.ok(r.errors.some((e) => e.includes('brak skryptu tasks.js')), r.errors.join('\n'));
+});
+
+test('planned-tasks: błąd składni skryptu', () => {
+  const r = v.validateSkill(plannedFixture(plannedSkill(SCRIPT_CALL), { 'tasks.js': 'function (\n' }));
+  assert.ok(r.errors.some((e) => e.includes('tasks.js')), r.errors.join('\n'));
+});
+
+test('planned-tasks: f-string z {{ w skrypcie nie jest markerem', () => {
+  const call = 'python3 .claude/skills/planned-tasks/tasks.py';
+  const r = v.validateSkill(plannedFixture(plannedSkill(call), { 'tasks.py': 'print(f"{{X}} {{x}}")\n' }));
+  assert.deepStrictEqual(r.errors, []);
+});
+
+test('planned-tasks: nieznane rozszerzenie skryptu to ostrzeżenie', () => {
+  const call = 'ruby .claude/skills/planned-tasks/tasks.rb';
+  const r = v.validateSkill(plannedFixture(plannedSkill(call), { 'tasks.rb': 'puts 1\n' }));
+  assert.deepStrictEqual(r.errors, []);
+  assert.ok(r.warnings.some((w) => w.includes('tasks.rb')), r.warnings.join('\n'));
+});
+
+test('planned-tasks: POST w skrypcie to ostrzeżenie, nie błąd', () => {
+  const script = "fetch('https://api.github.com/graphql', { method: 'POST' });\n";
+  const r = v.validateSkill(plannedFixture(plannedSkill(SCRIPT_CALL), { 'tasks.js': script }));
+  assert.deepStrictEqual(r.errors, []);
+  assert.ok(r.warnings.some((w) => w.includes('POST')), r.warnings.join('\n'));
+});
+
+test('planned-tasks: token w skrypcie to błąd', () => {
+  const script = "const t = 'pk_12345_ABCDEFGHIJKLMNOPQRSTUV';\n";
+  const r = v.validateSkill(plannedFixture(plannedSkill(SCRIPT_CALL), { 'tasks.js': script }));
+  assert.ok(r.errors.some((e) => e.includes('token')), r.errors.join('\n'));
+});
+
+test('planned-tasks: token w SKILL.md to błąd', () => {
+  const body = plannedSkill('gh issue list') + `\nexport GH_TOKEN=ghp_${'a'.repeat(36)}\n`;
+  const r = v.validateSkill(plannedFixture(body));
+  assert.ok(r.errors.some((e) => e.includes('token')), r.errors.join('\n'));
+});
+
+test('findScriptRefs pomija SKILL.md i powtórzenia', () => {
+  const text = '```bash\nnode .claude/skills/planned-tasks/tasks.js\nnode .claude/skills/planned-tasks/tasks.js --json\ncat .claude/skills/planned-tasks/SKILL.md\n```\n';
+  assert.deepStrictEqual(v.findScriptRefs(text), ['tasks.js']);
+});
+
+test('findWriteMethods łapie -X DELETE i --method PATCH', () => {
+  const hits = v.findWriteMethods('curl -X DELETE https://x\ngh api --method PATCH /repos\nfetch(u)\n');
+  assert.deepStrictEqual(hits.map((h) => h.line), [1, 2]);
+});
+
+// --- planned-tasks: poprawki po przeglądzie --------------------------------
+
+test('findWriteMethods łapie gh api z polami, -XPOST i metodę małymi literami', () => {
+  const text = [
+    'gh api repos/a/b/issues/1 -f state=closed',
+    "gh api graphql -f query='{viewer{login}}'",
+    'curl -XPOST https://x',
+    "fetch(u, { method: 'post' })",
+    'gh api repos/a/b/issues',
+  ].join('\n');
+  assert.deepStrictEqual(v.findWriteMethods(text).map((h) => h.line), [1, 2, 3, 4]);
+});
+
+test('findWriteCommands łapie podkomendy zapisu gh i cup', () => {
+  const text = [
+    'gh issue close 5',
+    'gh pr comment 3 --body-file x',
+    'cup update abc -s done',
+    'cup comment abc -m hi',
+    'gh issue list --state open',
+    'cup tasks --list 1 --all',
+  ].join('\n');
+  assert.deepStrictEqual(v.findWriteCommands(text).map((h) => h.line), [1, 2, 3, 4]);
+});
+
+test('planned-tasks: komenda zapisu w bloku bash SKILL.md to błąd', () => {
+  const r = v.validateSkill(plannedFixture(plannedSkill('gh issue list --state open\ngh issue close 5')));
+  assert.ok(r.errors.some((e) => e.includes('gh issue close')), r.errors.join('\n'));
+});
+
+test('planned-tasks: komenda zapisu w skrypcie to błąd', () => {
+  const script = "require('child_process').execFileSync('gh', ['issue', 'list']);\n// gh issue edit 5 --add-label x\n";
+  const r = v.validateSkill(plannedFixture(plannedSkill(SCRIPT_CALL), { 'tasks.js': script }));
+  assert.ok(r.errors.some((e) => e.includes('gh issue edit')), r.errors.join('\n'));
+});
+
+test('findTokenLiterals łapie tokeny gh auth token (gho_) i inne prefiksy GitHuba', () => {
+  for (const p of ['gho_', 'ghu_', 'ghs_', 'ghr_']) {
+    assert.strictEqual(v.findTokenLiterals(`t = '${p}${'A'.repeat(36)}'`).length, 1, p);
+  }
+});
+
+test('findScriptRefs widzi ścieżkę poza blokiem bash i w podkatalogu', () => {
+  const text = 'Uruchom `python3 .claude/skills/planned-tasks/scripts/zadania.py`.\n```\nnode .claude/skills/planned-tasks/x.mjs\n```\n';
+  assert.deepStrictEqual(v.findScriptRefs(text), ['scripts/zadania.py', 'x.mjs']);
+});
+
+test('planned-tasks: token w pliku katalogu skilla, którego SKILL.md nie wskazuje, to błąd', () => {
+  const r = v.validateSkill(plannedFixture(plannedSkill('gh issue list'), { 'helper.py': `T = 'ghp_${'b'.repeat(36)}'\n` }));
+  assert.ok(r.errors.some((e) => e.includes('token') && e.includes('helper.py')), r.errors.join('\n'));
+});
+
+test('checkScriptSyntax: brak interpretera w PATH to ostrzeżenie', () => {
+  const file = plannedFixture(plannedSkill(SCRIPT_CALL), { 'tasks.js': 'console.log(1)\n' });
+  const res = v.checkScriptSyntax(path.join(path.dirname(file), 'tasks.js'), () => false);
+  assert.strictEqual(res.error, undefined);
+  assert.ok(res.warning && res.warning.includes('node'), JSON.stringify(res));
+});

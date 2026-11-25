@@ -108,3 +108,37 @@ wyłącznie `completed` albo `not planned` (potwierdzone `gh issue close --help`
 | Brak pola priorytetu w Issues | Nie ma natywnego „po czym sortować" — próba odczytu `priority` z `--json` po prostu nie istnieje jako pole | Emuluj priorytet etykietą `priority:*` albo custom-polem w Projects — źródło ustal w wywiadzie, nie zgaduj |
 | Założenie, że `gh issue` nie widzi Projects **w ogóle** | Błędne założenie: `projectItems` jest realnym polem `--json` na `gh issue list`/`gh issue view` (potwierdzone listą dostępnych pól) — ale jego **odczyt wymaga** scope `read:project` na tokenie; bez niego zapytanie z tym polem zwraca błąd GraphQL, nie dane, co łatwo pomylić z „pole nie istnieje" | Dodaj `read:project` do scope tokena, gdy potrzebujesz `projectItems` przez `gh issue`; dla samego widoku „board" (kolumny, pole `Status`) w czystym kształcie Projects prostszy jest `gh project item-list <numer> --owner <owner> --format json` |
 | Zamknięcie bez `--reason` | Issue zamyka się, ale bez rozróżnienia „zrobione" vs. „nie będziemy robić" — audyt później nie odróżni jednego od drugiego | `gh issue close <n> --reason completed` albo `--reason "not planned"` — zawsze jawnie |
+
+## Odczyt przeglądowy
+
+Dla skilla przeglądu zadań (`/create-planned-tasks`). Wszystko niżej to
+**odczyt**; zweryfikowane na prawdziwym repo (2026-11-13).
+
+```bash
+gh issue list -R <owner>/<repo> --state open --limit 1000 \
+  --json number,title,labels,assignees,milestone,createdAt,url
+```
+
+- **`--limit` zawsze jawnie** — domyślnie 30, bez ostrzeżenia o reszcie.
+- **Priorytet i „status w toku"** są etykietami albo polami Projects —
+  nazwy z wywiadu, nie zgadywane.
+- **REST `/repos/<owner>/<repo>/issues` zwraca też pull requesty** (pole
+  `pull_request`); `gh issue list` ich nie zwraca. Skrypt na REST odsiewa je
+  jawnie.
+- **Podzadania (sub-issues) są tylko w GraphQL** — `gh issue list --json`
+  ich nie ma:
+
+  ```bash
+  gh api graphql -f query='query{repository(owner:"<owner>",name:"<repo>"){issues(states:OPEN,first:100){nodes{number parent{number} subIssues(first:50){totalCount}}}}}'
+  ```
+
+  To **odczyt metodą POST** — walidator zgłosi ostrzeżenie, a skrypt opisuje
+  to w komentarzu. Stronicuj `pageInfo { hasNextPage endCursor }`.
+- **Zakres „cała organizacja / kilka repo"**: `gh search issues --owner
+  <owner> --state open --limit 1000 --json repository,number,title,labels,url`
+  — wynik wyszukiwarki ma opóźnienie indeksu; do kontroli krzyżowej używaj
+  `gh issue list` per repo.
+- **Kontrola krzyżowa:** inny kanał niż przegląd, bez wspólnego limitu —
+  REST ze stronicowaniem i odsiewem PR-ów:
+  `gh api --paginate 'repos/<owner>/<repo>/issues?state=open&per_page=100' --jq '.[] | select(.pull_request == null) | .number'`
+  — porównać zbiór numerów, nie tylko ich liczbę.

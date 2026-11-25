@@ -14,8 +14,8 @@
     {
       "name": "create-workflow-skills",
       "source": "./plugins/create-workflow-skills",
-      "description": "Generator skilli workflow /next-task i /add-task dopasowanych do środowiska projektu. Przeprowadza wywiad o tracker zadań, statusy, definicję ukończenia i politykę git, po czym zapisuje dwa samowystarczalne skille do .claude/skills/. Plugin jednorazowy — po weryfikacji wyłączasz go, skille zostają",
-      "version": "1.2.1",
+      "description": "Generatory skilli workflow dopasowanych do środowiska projektu. /create-workflow-skills przeprowadza wywiad o tracker zadań, statusy, definicję ukończenia i politykę git i zapisuje /next-task oraz /add-task; /create-planned-tasks rozpoznaje dowolny system zadań (tracker, API, MCP, plik) i zapisuje /planned-tasks — przegląd otwartych zadań tylko do odczytu, ze skryptem pisanym od zera. Plugin jednorazowy — po weryfikacji wyłączasz go, skille zostają",
+      "version": "1.3.0",
       "author": {
         "name": "RawCode Studio",
         "email": "sebastian.soczka@gmail.com",
@@ -29,6 +29,8 @@
         "add-task",
         "clickup",
         "github-issues",
+        "planned-tasks",
+        "overview",
         "generator",
         "scaffold"
       ],
